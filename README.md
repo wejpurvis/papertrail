@@ -1,7 +1,6 @@
 # Papertrail
 
-A toy FastAPI application for ingesting and retrieving scientific papers, 
-built to learn FastAPI, Tortoise ORM, and async Python patterns.
+A toy FastAPI application for ingesting and retrieving scientific papers, built to learn FastAPI, Tortoise ORM, and async Python patterns.
 
 ## Stack
 
