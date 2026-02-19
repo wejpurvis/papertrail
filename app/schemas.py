@@ -2,10 +2,10 @@ r"""
 Defines two Pydantic models:
 
 - `PaperCreate`: what the API accepts in a POST request body (`title`, `authors`,`year). No `id`, `abstract`, or `created_at` because those are generated server-side.
-- `PaperResponse`: what the API *returns*. Includes the full set of fields. `orm_mode = True` lets Pydantic read directly from a Tortoise ORM object instead of requiring a plain dict.
+- `PaperResponse`: what the API *returns*. Includes the full set of fields. `from_attributes = True` lets Pydantic read directly from a Tortoise ORM object instead of requiring a plain dict.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
 
@@ -27,5 +27,4 @@ class PaperResponse(BaseModel):
     year: int
     created_at: datetime
 
-    class Config:
-        orm_mode = True  # Allows Pydantic to read data from ORM objects
+    model_config = ConfigDict(from_attributes=True)
