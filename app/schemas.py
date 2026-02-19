@@ -13,6 +13,7 @@ from datetime import datetime
 # Validates incoming POST request body
 class PaperCreate(BaseModel):
     title: str
+    abstract: Optional[str] = "This is a placeholder abstract."  # Optional with default
     authors: list[str]
     year: int
 
