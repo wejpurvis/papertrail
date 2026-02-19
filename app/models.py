@@ -1,4 +1,7 @@
-# Tortoise ORM database models
+r"""
+Defines `Paper` as a Tortoise ORM model. This is hwat maps to the actual `papers` table in SQLite. Each fied (`id`,`title`,`abstract`,`authors`,`year`,`created_at`) becomes a column. Tortoise handles all the SQL.
+"""
+
 from tortoise.models import Model
 from tortoise import fields
 
