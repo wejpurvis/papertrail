@@ -1,0 +1,16 @@
+name: papertrail
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+    - fastapi
+    - uvicorn
+    - tortoise-orm
+    - aiosqlite
+    - pytest
+    - pytest-asyncio
+    - httpx
+    - python-dotenv
