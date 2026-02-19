@@ -5,6 +5,17 @@ Wires everything together with two routes:
 - `GET /papers/{paper_id}`: retrieves a paper by ID, returns a `
 
 The `lifespan` function runs on startup/shutdown - it initialises the Tortoise connection using the config from `database.py`, auto-creates any missing tables (`generate_schemas()`), and then closes connections when the app stops.
+
+Here is what `register_tortoise()` does under the hood:
+
+Server starts
+-> Tortoise.init() connects to SQLite and registers models
+-> generate_schemas() creates the `papers` table if it doesn't exist
+-> app is ready, routes can now use Paper.create() etc...
+
+Server stops
+-> Tortoise.close_connections() gracefully shuts down the DB connection
+
 """
 
 from fastapi import FastAPI, HTTPException
