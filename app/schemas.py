@@ -1,5 +1,9 @@
-# Deine two Pydantic models: validate incoming POST request body and shape API response
+r"""
+Defines two Pydantic models:
 
+- `PaperCreate`: what the API accepts in a POST request body (`title`, `authors`,`year). No `id`, `abstract`, or `created_at` because those are generated server-side.
+- `PaperResponse`: what the API *returns*. Includes the full set of fields. `orm_mode = True` lets Pydantic read directly from a Tortoise ORM object instead of requiring a plain dict.
+"""
 
 from pydantic import BaseModel
 from typing import Optional
