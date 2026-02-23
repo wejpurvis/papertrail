@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/"
+      xmlns:arxiv="http://arxiv.org/schemas/atom">
+
+  <link href="http://arxiv.org/api/query?search_query=ti:carbon+capture&amp;max_results=2"
+        rel="self" type="application/atom+xml"/>
+  <title type="html">ArXiv Query: ti:carbon capture</title>
+  <id>http://arxiv.org/api/4e3q7gvnzw8f</id>
+  <updated>2024-11-01T00:00:00-05:00</updated>
+  <opensearch:totalResults>2</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <opensearch:itemsPerPage>2</opensearch:itemsPerPage>
+
+  <entry>
+    <id>http://arxiv.org/abs/2401.12345v1</id>
+    <updated>2024-01-22T00:00:00-05:00</updated>
+    <published>2024-01-22T00:00:00-05:00</published>
+    <title>Electrochemical Carbon Capture and Conversion: Recent Advances in Catalyst Design</title>
+    <summary>
+      The electrochemical reduction of CO2 to value-added chemicals represents a promising
+      approach to carbon capture and utilization. In this review, we discuss recent advances
+      in the design of heterogeneous catalysts for CO2 electroreduction, with particular
+      emphasis on selectivity toward formate and formic acid production. We highlight the
+      role of surface morphology, defect engineering, and bimetallic systems in tuning
+      catalytic activity. Density functional theory (DFT) calculations have provided critical
+      insights into reaction intermediates and rate-limiting steps, guiding experimental
+      efforts. Machine learning approaches have further accelerated catalyst discovery by
+      enabling high-throughput screening of compositional and structural parameter spaces.
+      Challenges including long-term stability, membrane design, and technoeconomic viability
+      are discussed in the context of scaling these systems toward industrial deployment.
+    </summary>
+    <author>
+      <name>Sarah J. Mitchell</name>
+    </author>
+    <author>
+      <name>David R. Chen</name>
+    </author>
+    <author>
+      <name>Priya Anand</name>
+    </author>
+    <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom"
+      term="cond-mat.mtrl-sci" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cond-mat.mtrl-sci" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="physics.chem-ph" scheme="http://arxiv.org/schemas/atom"/>
+  </entry>
+
+  <entry>
+    <id>http://arxiv.org/abs/2402.67890v2</id>
+    <updated>2024-02-14T00:00:00-05:00</updated>
+    <published>2024-02-10T00:00:00-05:00</published>
+    <title>Bayesian Optimization of Indium-Based Catalysts for CO2-to-Formate Electroreduction</title>
+    <summary>
+      We present a Bayesian optimization framework for accelerating the discovery of
+      high-performance indium-based catalysts for the selective electroreduction of CO2
+      to formate. Starting from a design space of 240 candidate compositions, our Gaussian
+      process surrogate model guided experimental synthesis and testing across three
+      iterative campaigns. After 47 experiments, we identified an In-Sn alloy composition
+      exhibiting a Faradaic efficiency of 94.2% and a partial current density of 312 mA/cm2
+      at -1.1 V vs RHE, representing state-of-the-art performance at this potential window.
+      Feature importance analysis revealed that Sn content and annealing temperature were
+      the dominant drivers of selectivity. This work demonstrates the practical utility of
+      closed-loop ML-guided synthesis for electrocatalyst development, with implications for
+      scalable direct air capture systems.
+    </summary>
+    <author>
+      <name>Wei Zhang</name>
+    </author>
+    <author>
+      <name>Thomas O'Brien</name>
+    </author>
+    <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom"
+      term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cond-mat.mtrl-sci" scheme="http://arxiv.org/schemas/atom"/>
+  </entry>
+
+</feed>
