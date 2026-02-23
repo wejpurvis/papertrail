@@ -19,3 +19,14 @@ class Paper(Model):
 
     class Meta:
         table = "papers"
+
+
+class Chunk(Model):
+    id = fields.IntField(primary_key=True)
+    paper = fields.ForeignKeyField("models.Paper", related_name="chunks")
+    text = fields.TextField()
+    index = fields.IntField()  # position of the chunk in the paper (0-based)
+    created_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "chunks"

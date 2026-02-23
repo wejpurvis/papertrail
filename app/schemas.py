@@ -28,3 +28,26 @@ class PaperResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# For chunk-related endpoints
+class ChunkResponse(BaseModel):
+    id: int
+    text: str
+    index: int
+    paper_id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# For GET /papers/{id} with chunks
+class PaperWithChunks(BaseModel):
+    id: int
+    title: str
+    abstract: str
+    authors: list[str]
+    year: int
+    created_at: datetime
+    chunks: list[ChunkResponse]
+
+    model_config = ConfigDict(from_attributes=True)
