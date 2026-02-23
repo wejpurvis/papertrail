@@ -14,6 +14,7 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 from tortoise import Tortoise
 from app.main import app
+from app.chunker import chunk_text
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -86,3 +87,24 @@ async def test_get_nonexistent_paper(client):
     response = await client.get("/papers/9999")
     assert response.status_code == 404
     assert response.json() == {"detail": "Paper not found"}
+
+
+# Test chunk text function
+@pytest.mark.asyncio
+async def test_chunk_text():
+    text = "This is a test string to be chunked into smaller pieces for testing."
+    chunks = chunk_text(text, chunk_size=5, overlap=2)
+    assert chunks == [
+        "This is a test string",
+        "test string to be chunked",
+        "be chunked into smaller pieces",
+        "smaller pieces for testing.",
+    ]
+
+
+# Test chunk text with short text
+@pytest.mark.asyncio
+async def test_chunk_text_short():
+    text = "the cat sat on the mat today"  # 7 words
+    chunks = chunk_text(text, chunk_size=5, overlap=2)
+    assert chunks == ["the cat sat on the", "on the mat today"]
