@@ -31,13 +31,13 @@
       are discussed in the context of scaling these systems toward industrial deployment.
     </summary>
     <author>
-      <name>Sarah J. Mitchell</name>
+      <n>Sarah J. Mitchell</n>
     </author>
     <author>
-      <name>David R. Chen</name>
+      <n>David R. Chen</n>
     </author>
     <author>
-      <name>Priya Anand</name>
+      <n>Priya Anand</n>
     </author>
     <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom"
       term="cond-mat.mtrl-sci" scheme="http://arxiv.org/schemas/atom"/>
@@ -64,10 +64,10 @@
       scalable direct air capture systems.
     </summary>
     <author>
-      <name>Wei Zhang</name>
+      <n>Wei Zhang</n>
     </author>
     <author>
-      <name>Thomas O'Brien</name>
+      <n>Thomas O'Brien</n>
     </author>
     <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom"
       term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>

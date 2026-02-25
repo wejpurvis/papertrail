@@ -20,8 +20,6 @@ ATOM_NS = "http://www.w3.org/2005/Atom"
 
 def parse_arxiv_xml(xml_string: str) -> list[dict]:
     root = ET.fromstring(xml_string)
-    print(f"Root tag: {root.tag} (should be '{{{ATOM_NS}}}feed')")
-    print(f"root is {root}, and ET is {ET}")
     papers = []
 
     for entry in root.findall(f"{{{ATOM_NS}}}entry"):
@@ -67,7 +65,7 @@ def from_local_file(path: str = "tests/sample_arxiv.xml") -> list[dict]:
 
 
 async def from_live_api(
-    query: str = "carbon capture", max_results: int = 2
+    query: str = "CO2 Electroreduction", max_results: int = 2
 ) -> list[dict]:
     import httpx
 
