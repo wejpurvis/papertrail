@@ -73,7 +73,7 @@ class SearchResult(BaseModel):
     chunk_id: int
     paper_id: int
     paper_title: str
-    test: str
+    text: str
     score: float
 
 
@@ -81,6 +81,7 @@ class SearchResult(BaseModel):
 class AskRequest(BaseModel):
     question: str
     top_k: int = 5
+    paper_ids: Optional[list[int]] = None  # if set, restrict search to these papers
 
 
 # For LLM question-answering response
