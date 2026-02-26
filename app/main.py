@@ -18,7 +18,7 @@ Server stops
 
 """
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile, File
 from tortoise.contrib.fastapi import register_tortoise
 from app.database import TORTOISE_ORM
 from app.models import Chunk, Paper, Embedding
@@ -34,6 +34,7 @@ from app.chunker import chunk_text
 from app.arxiv import fetch_arxiv_papers
 from app.embedder import embed_text, cosine_similarity
 from app.llm import get_llm_provider
+from app.pdf import extract_text_from_pdf
 
 
 app = FastAPI()
@@ -84,7 +85,8 @@ async def chunk_paper(paper_id: int, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=404, detail="Paper not found")
 
     async def do_chunking():
-        chunks = chunk_text(paper_obj.abstract)
+        text_to_chunk = paper_obj.full_text or paper_obj.abstract
+        chunks = chunk_text(text_to_chunk)
         for i, text in enumerate(chunks):
             await Chunk.create(paper=paper_obj, text=text, index=i)
 
@@ -136,7 +138,7 @@ async def ingest_arxiv(query: str = "CO2 Electroreduction", max_results: int = 5
         ingested_papers += 1
 
         # Chunk the abstract and create `Chunk` records
-        chunks = chunk_text(paper["abstract"])
+        chunks = chunk_text(paper.get("full_text") or paper["abstract"])
         for i, text in enumerate(chunks):
             chunk_obj = await Chunk.create(paper=paper_obj, text=text, index=i)
             ingested_chunks += 1
@@ -270,3 +272,24 @@ async def ask_question(question: AskRequest):
     llm = get_llm_provider().complete(system_prompt, user_prompt)
     # 7. Return response
     return AskResponse(answer=llm, source_chunks=top_results)
+
+
+# POST /upload-pdf
+@app.post("/upload-pdf")
+async def upload_pdf(file: UploadFile = File(...)):
+    """
+    Accepts a file upload (`UploadFile` in FastAPI), extracts text using `extract_test_from_pdf()`, and creates a new `Paper` record (title from filename, abstract from first 1000 chars of extracted test, full text somwhere else), Chunks the full text (not just the abstract this time), embeds all chunks, and retuns `paper_id` and chunk count.
+    """
+    contents = await file.read()
+    text = extract_text_from_pdf(contents)
+    title = file.filename
+    abstract = text[:1000]  # first 1000 chars as abstract
+    paper_obj = await Paper.create(
+        title=title, abstract=abstract, authors=[], year=0, full_text=text
+    )
+    chunks = chunk_text(text)
+    for i, chunk_text in enumerate(chunks):
+        chunk_obj = await Chunk.create(paper=paper_obj, text=chunk_text, index=i)
+        vector = embed_text(chunk_text)
+        await Embedding.create(chunk=chunk_obj, vector=vector)
+    return {"paper_id": paper_obj.id, "chunk_count": len(chunks)}

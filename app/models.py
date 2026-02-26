@@ -14,6 +14,7 @@ class Paper(Model):
     authors = fields.JSONField()  # list of strings
     year = fields.IntField()
     created_at = fields.DatetimeField(auto_now_add=True)
+    full_text = fields.TextField(null=True)  # for storing extracted text from PDFs
 
     def __str__(self):
         return self.title
