@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Papertrail</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f4f4f5;
+      color: #1a1a1a;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: #18181b;
+      color: #fff;
+      padding: 14px 20px;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 600; }
+    header p { font-size: 0.8rem; color: #71717a; }
+
+    /* Controls strip */
+    .controls {
+      display: flex;
+      gap: 10px;
+      padding: 10px 16px;
+      background: #fff;
+      border-bottom: 1px solid #e4e4e7;
+    }
+
+    .card {
+      flex: 1;
+      border: 1px solid #e4e4e7;
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .card h3 {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #71717a;
+      margin-bottom: 8px;
+    }
+    .row { display: flex; gap: 8px; align-items: center; }
+
+    input[type="text"],
+    input[type="number"] {
+      border: 1px solid #d4d4d8;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 0.85rem;
+      outline: none;
+      background: #fafafa;
+    }
+    input[type="text"] { flex: 1; }
+    input[type="number"] { width: 58px; }
+    input[type="text"]:focus,
+    input[type="number"]:focus { border-color: #6366f1; background: #fff; }
+
+    /* File picker */
+    input[type="file"] { display: none; }
+    .file-label {
+      flex: 1;
+      display: inline-block;
+      border: 1px solid #d4d4d8;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 0.85rem;
+      color: #71717a;
+      background: #fafafa;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .file-label:hover { border-color: #0891b2; }
+
+    /* Buttons */
+    button {
+      border: none;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.12s;
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .btn-ingest { background: #6366f1; color: #fff; }
+    .btn-ingest:hover:not(:disabled) { background: #4f46e5; }
+
+    .btn-upload { background: #0891b2; color: #fff; }
+    .btn-upload:hover:not(:disabled) { background: #0e7490; }
+
+    .btn-send { background: #6366f1; color: #fff; padding: 9px 20px; }
+    .btn-send:hover:not(:disabled) { background: #4f46e5; }
+
+    /* Message history */
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .msg {
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.875rem;
+      line-height: 1.55;
+      max-width: 82%;
+    }
+    .msg.user {
+      align-self: flex-end;
+      background: #6366f1;
+      color: #fff;
+      border-bottom-right-radius: 3px;
+    }
+    .msg.assistant {
+      align-self: flex-start;
+      background: #fff;
+      border: 1px solid #e4e4e7;
+      border-bottom-left-radius: 3px;
+      max-width: 88%;
+    }
+    .msg.system {
+      align-self: center;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      color: #166534;
+      font-size: 0.8rem;
+      border-radius: 6px;
+      text-align: center;
+      max-width: 72%;
+    }
+    .msg.error {
+      align-self: center;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      font-size: 0.8rem;
+      border-radius: 6px;
+      text-align: center;
+      max-width: 72%;
+    }
+
+    .answer { white-space: pre-wrap; }
+
+    .sources {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid #e4e4e7;
+    }
+    .sources-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #a1a1aa;
+      margin-bottom: 5px;
+    }
+    .source-item {
+      font-size: 0.78rem;
+      color: #52525b;
+      background: #f4f4f5;
+      border-radius: 4px;
+      padding: 4px 8px;
+      margin-top: 3px;
+    }
+
+    /* Question input row */
+    .input-row {
+      display: flex;
+      gap: 8px;
+      padding: 12px 16px;
+      background: #fff;
+      border-top: 1px solid #e4e4e7;
+    }
+    .input-row input[type="text"] {
+      flex: 1;
+      padding: 9px 14px;
+      font-size: 0.9rem;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Papertrail</h1>
+    <p>Scientific paper search and Q&amp;A</p>
+  </header>
+
+  <div class="controls">
+    <div class="card">
+      <h3>Ingest from arXiv</h3>
+      <div class="row">
+        <input type="text" id="ingest-query" placeholder="e.g. carbon capture catalyst">
+        <input type="number" id="ingest-max" value="5" min="1" max="20" title="Max results">
+        <button class="btn-ingest" id="ingest-btn" onclick="ingest()">Ingest</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Upload PDF</h3>
+      <div class="row">
+        <label class="file-label" id="file-label" for="pdf-input">Choose PDF…</label>
+        <input type="file" id="pdf-input" accept=".pdf" onchange="onFileChange(this)">
+        <button class="btn-upload" id="upload-btn" onclick="uploadPDF()">Upload</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="messages" id="messages">
+    <div class="msg system">Ingest papers from arXiv or upload a PDF, then ask a question below.</div>
+  </div>
+
+  <div class="input-row">
+    <input type="text" id="question-input" placeholder="Ask a question about the papers…"
+           onkeydown="if (event.key === 'Enter' && !event.shiftKey) ask()">
+    <button class="btn-send" id="ask-btn" onclick="ask()">Send</button>
+  </div>
+
+  <script>
+    // --- Helpers ---
+
+    function addMsg(role, html) {
+      const box = document.getElementById('messages');
+      const div = document.createElement('div');
+      div.className = `msg ${role}`;
+      div.innerHTML = html;
+      box.appendChild(div);
+      box.scrollTop = box.scrollHeight;
+      return div;
+    }
+
+    function escHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    function setDisabled(id, val) {
+      document.getElementById(id).disabled = val;
+    }
+
+    function onFileChange(input) {
+      document.getElementById('file-label').textContent =
+        input.files[0]?.name ?? 'Choose PDF…';
+    }
+
+    // --- arXiv ingest ---
+
+    async function ingest() {
+      const query = document.getElementById('ingest-query').value.trim();
+      const max   = document.getElementById('ingest-max').value;
+      if (!query) { addMsg('error', 'Enter a search query first.'); return; }
+
+      setDisabled('ingest-btn', true);
+      addMsg('system', `Ingesting <strong>${escHtml(query)}</strong> from arXiv (max ${max})…`);
+
+      try {
+        const res  = await fetch(`/ingest?query=${encodeURIComponent(query)}&max_results=${max}`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail ?? 'Ingest failed');
+        addMsg('system',
+          `Done — ${data.ingested_papers} papers ingested, ${data.ingested_chunks} chunks created` +
+          (data.skipped_papers ? `, ${data.skipped_papers} skipped (already stored).` : '.')
+        );
+      } catch (e) {
+        addMsg('error', `Ingest error: ${escHtml(e.message)}`);
+      } finally {
+        setDisabled('ingest-btn', false);
+      }
+    }
+
+    // --- PDF upload ---
+
+    async function uploadPDF() {
+      const input = document.getElementById('pdf-input');
+      if (!input.files[0]) { addMsg('error', 'Select a PDF file first.'); return; }
+
+      const file = input.files[0];
+      setDisabled('upload-btn', true);
+      addMsg('system', `Uploading <strong>${escHtml(file.name)}</strong>…`);
+
+      const form = new FormData();
+      form.append('file', file);
+
+      try {
+        const res  = await fetch('/upload-pdf', { method: 'POST', body: form });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail ?? 'Upload failed');
+        addMsg('system',
+          `Uploaded <strong>${escHtml(file.name)}</strong> → paper #${data.paper_id}, ${data.chunk_count} chunks.`
+        );
+      } catch (e) {
+        addMsg('error', `Upload error: ${escHtml(e.message)}`);
+      } finally {
+        setDisabled('upload-btn', false);
+        input.value = '';
+        document.getElementById('file-label').textContent = 'Choose PDF…';
+      }
+    }
+
+    // --- Ask ---
+
+    async function ask() {
+      const input    = document.getElementById('question-input');
+      const question = input.value.trim();
+      if (!question) return;
+
+      input.value = '';
+      setDisabled('ask-btn', true);
+      addMsg('user', escHtml(question));
+      const bubble = addMsg('assistant', '<em style="color:#a1a1aa">Thinking…</em>');
+
+      try {
+        const res  = await fetch('/ask', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ question, top_k: 5 }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail ?? 'Request failed');
+
+        let html = `<div class="answer">${escHtml(data.answer)}</div>`;
+
+        if (data.source_chunks?.length) {
+          html += `<div class="sources"><div class="sources-label">Sources</div>`;
+          data.source_chunks.forEach((chunk, i) => {
+            const score = typeof chunk.score === 'number' ? chunk.score.toFixed(3) : '—';
+            html += `<div class="source-item">[${i + 1}] Paper #${chunk.paper_id} &mdash; similarity ${score}</div>`;
+          });
+          html += `</div>`;
+        }
+
+        bubble.innerHTML = html;
+      } catch (e) {
+        bubble.innerHTML = `<span style="color:#991b1b">Error: ${escHtml(e.message)}</span>`;
+      } finally {
+        setDisabled('ask-btn', false);
+      }
+    }
+  </script>
+
+</body>
+</html>
