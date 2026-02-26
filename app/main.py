@@ -22,11 +22,18 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException
 from tortoise.contrib.fastapi import register_tortoise
 from app.database import TORTOISE_ORM
 from app.models import Chunk, Paper, Embedding
-from app.schemas import PaperCreate, PaperResponse, PaperWithChunks
+from app.schemas import (
+    PaperCreate,
+    PaperResponse,
+    PaperWithChunks,
+    AskRequest,
+    AskResponse,
+)
 from typing import Union
 from app.chunker import chunk_text
 from app.arxiv import fetch_arxiv_papers
 from app.embedder import embed_text, cosine_similarity
+from app.llm import get_llm_provider
 
 
 app = FastAPI()
@@ -137,7 +144,11 @@ async def ingest_arxiv(query: str = "CO2 Electroreduction", max_results: int = 5
             vector = embed_text(text)
             await Embedding.create(chunk=chunk_obj, vector=vector)
 
-    return {"ingested_papers": ingested_papers, "ingested_chunks": ingested_chunks, "skipped_papers": skipped_papers}
+    return {
+        "ingested_papers": ingested_papers,
+        "ingested_chunks": ingested_chunks,
+        "skipped_papers": skipped_papers,
+    }
 
 
 # POST /papers/{paper_id}/embed: Triggers embedding of all chunks for a paper
@@ -189,3 +200,73 @@ async def search_papers(query: str, top_k: int = 5):
     # Return top_k results sorted by score
     results.sort(key=lambda x: x["score"], reverse=True)
     return {"query": query, "results": results[:top_k]}
+
+
+# POST /ask
+@app.post("/ask")
+async def ask_question(question: AskRequest):
+    """
+    1. Embed the question (Using `embed_text()`)
+    2. Retrieve top_k most relevant chunks using cosine similarity (similar to /search)
+    3. Build a context string from the retrieved chunks::
+
+    ```python
+    context = "\n\n".join([
+        f"[{i+1}] {result.text}"
+        for i, result in enumerate(results)
+    ])
+    ```
+    4. Build a system prompt::
+
+    ```txt
+    You are a scientific research assistant. Answer the user's question based
+    only on the provided context. If the answer is not in the context, say so.
+    Always cite which source [1], [2] etc. you are drawing from.
+    ```
+
+    5. Build the user prompt::
+
+    ```txt
+    Context:
+    {context}
+
+    Question: {question}
+    ```
+    6. Call `get_llm_provider().complete(system, user)` to get the answer from the LLM
+    7. Return `AskResponse` with the answer and the source chunks
+    """
+    question = question.question
+    top_k = question.top_k
+    # 1. Embed question
+    query_vector = embed_text(question)
+    # 2. Retrieve top_k relevant chunks using cosine similarity
+    chunks = await Chunk.all().prefetch_related("embedding")
+    results = []
+    for chunk in chunks:
+        if not chunk.embedding:
+            continue
+        score = cosine_similarity(query_vector, chunk.embedding.vector)
+        results.append(
+            {
+                "paper_id": chunk.paper_id,
+                "chunk_id": chunk.id,
+                "text": chunk.text,
+                "score": score,
+            }
+        )
+    results.sort(key=lambda x: x["score"], reverse=True)
+    top_results = results[:top_k]
+    # 3. Build context string
+    context = "\n\n".join(
+        [f"[{i+1}] {result['text']}" for i, result in enumerate(top_results)]
+    )
+    # 4. Build system prompt
+    system_prompt = """
+        You are a scientific research assistant. Answer the user's question based only on the provided context. If the answer is not in the context, say so. Always cite which source [1], [2] etc. you are drawing from.
+        """
+    # 5. Build user prompt
+    user_prompt = f"""Context: {context} \nQuestion: {question}"""
+    # 6. Call LLM provider
+    llm = get_llm_provider().complete(system_prompt, user_prompt)
+    # 7. Return response
+    return AskResponse(answer=llm, source_chunks=top_results)
