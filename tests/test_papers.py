@@ -27,9 +27,19 @@ Covered cases:
   - POST /ingest              — fetch from arXiv, store papers/chunks/embeddings
   - POST /ingest (duplicate)  — skips already-ingested papers, reports skipped count
   - POST /search              — embeds query, returns ranked results with scores in [0, 1]
+
+  LLM:
+  - POST /ask                 — end-to-end test with mocked LLM provider, verifies
+                                prompt construction and response handling
+  PDF Upload:
+  - extract_text_from_pdf()   — unit test with a minimal in-memory PDF
+  - POST /upload-pdf          — mock PDF text extraction, verify paper and chunks
+                                created
 """
 
+import io
 import pytest
+import pytest_asyncio
 import numpy as np
 from httpx import AsyncClient, ASGITransport
 from tortoise import Tortoise
@@ -37,9 +47,51 @@ from app.main import app
 from app.chunker import chunk_text
 from app.arxiv import fetch_arxiv_papers
 from app.embedder import embed_text, cosine_similarity
+from unittest.mock import AsyncMock, MagicMock, patch
+from app.pdf import extract_text_from_pdf
 
 
-@pytest.fixture(scope="function", autouse=True)
+def _make_pdf(text: str) -> bytes:
+    """Build a minimal valid single-page PDF containing the given ASCII text."""
+    stream = f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET\n".encode()
+    o1 = b"1 0 obj\n<</Type/Catalog/Pages 2 0 R>>\nendobj\n"
+    o2 = b"2 0 obj\n<</Type/Pages/Kids[3 0 R]/Count 1>>\nendobj\n"
+    o3 = (
+        b"3 0 obj\n"
+        b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]"
+        b"/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>\n"
+        b"endobj\n"
+    )
+    o4 = (
+        f"4 0 obj\n<</Length {len(stream)}>>\nstream\n".encode()
+        + stream
+        + b"endstream\nendobj\n"
+    )
+    o5 = b"5 0 obj\n<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>\nendobj\n"
+
+    header = b"%PDF-1.4\n"
+    objs = [o1, o2, o3, o4, o5]
+
+    pos = len(header)
+    offsets = []
+    for obj in objs:
+        offsets.append(pos)
+        pos += len(obj)
+
+    body = b"".join(objs)
+    xref_pos = len(header) + len(body)
+
+    xref = b"xref\n0 6\n0000000000 65535 f \n"
+    xref += b"".join(f"{off:010d} 00000 n \n".encode() for off in offsets)
+
+    trailer = (
+        f"trailer\n<</Size 6/Root 1 0 R>>\nstartxref\n{xref_pos}\n%%EOF\n"
+    ).encode()
+
+    return header + body + xref + trailer
+
+
+@pytest_asyncio.fixture(scope="function", autouse=True)
 async def setup_db():
     await Tortoise.init(db_url="sqlite://:memory:", modules={"models": ["app.models"]})
     await Tortoise.generate_schemas()
@@ -47,7 +99,7 @@ async def setup_db():
     await Tortoise.close_connections()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def client():
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -140,7 +192,7 @@ LONG_ABSTRACT = (
 )  # 70 words — enough to satisfy the chunker's overlap=50 threshold
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def paper_with_chunks(client):
     """Creates a paper, triggers chunking, and returns the paper_id."""
     create_response = await client.post(
@@ -326,3 +378,77 @@ async def test_no_duplicate_ingest(query: str = "deep learning", max_results: in
         data_2 = ingest_response_2.json()
         assert "skipped_papers" in data_2
         assert data_2["skipped_papers"] > 0
+
+
+# ----- LLM tests -----
+
+
+@pytest.mark.asyncio
+async def test_ask_endpoint(client):
+    """
+    Seed a paper locally (no network), mock the LLM provider, POST to `/ask`,
+    and assert the answer comes back correctly.
+    """
+    # Seed: create a paper, chunk it, embed it — all local, no arXiv call
+    create_res = await client.post(
+        "/papers/",
+        json={
+            "title": "NLP Test Paper",
+            "abstract": LONG_ABSTRACT,
+            "authors": ["Alice"],
+            "year": 2024,
+        },
+    )
+    assert create_res.status_code == 200
+    paper_id = create_res.json()["id"]
+
+    await client.post(f"/papers/{paper_id}/chunks")
+    await client.post(f"/papers/{paper_id}/embed")
+
+    # Mock the LLM — complete() is async so use AsyncMock
+    mock_provider = MagicMock()
+    mock_provider.complete = AsyncMock(return_value="This is a test answer.")
+
+    with patch("app.main.get_llm_provider", return_value=mock_provider):
+        ask_response = await client.post(
+            "/ask", json={"question": "What is information retrieval?", "top_k": 1}
+        )
+
+    assert ask_response.status_code == 200
+    data = ask_response.json()
+    assert "answer" in data
+    assert data["answer"] == "This is a test answer."
+    mock_provider.complete.assert_called_once()
+
+
+def test_extract_pdf_text():
+    """
+    Build a minimal PDF in memory using _make_pdf(), pass it to
+    `extract_text_from_pdf()`, and assert the expected text is present.
+    """
+    pdf_bytes = _make_pdf("Hello PDF test")
+    extracted = extract_text_from_pdf(pdf_bytes)
+    assert isinstance(extracted, str)
+    assert "Hello" in extracted
+
+
+@pytest.mark.asyncio
+async def test_upload_pdf_endpoint(client):
+    """
+    Mock PDF text extraction so we control the returned text, upload a PDF,
+    and assert a paper is created with at least one chunk.
+    """
+    # Use LONG_ABSTRACT as the extracted text so the chunker produces >= 1 chunk.
+    # We mock extract_text_from_pdf to avoid depending on pypdf's ability to
+    # extract text from a minimal test PDF.
+    with patch("app.main.extract_text_from_pdf", return_value=LONG_ABSTRACT):
+        response = await client.post(
+            "/upload-pdf",
+            files={"file": ("test.pdf", b"%PDF-1.4 fake", "application/pdf")},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "paper_id" in data
+    assert "chunk_count" in data
+    assert data["chunk_count"] > 0
