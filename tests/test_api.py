@@ -1,8 +1,4 @@
 """
-How to find fomrat of an unkown API
-"""
-
-"""
 How to find the format of an unknown API response.
 Run this before writing any parsing code.
 """
