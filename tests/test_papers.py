@@ -1,20 +1,42 @@
 r"""
-Integration tests for the /papers/ API endpoints.
+Tests for the paper ingestion, retrieval, chunking, embedding, and search pipeline.
 
-Uses an in-memory SQLite database (via Tortoise ORM) spun up fresh for each
-test function, and an httpx AsyncClient pointed at the FastAPI ASGI app.
+Test setup:
+- Each test function gets a fresh in-memory SQLite database via Tortoise ORM
+- API calls go through an httpx AsyncClient pointed at the FastAPI ASGI app
+- Integration tests (marked with @pytest.mark.integration) hit the live arXiv API
+  and can be run with: pytest -m integration
 
 Covered cases:
-- POST /papers/    — create a paper and verify the returned fields
-- GET  /papers/{id} — retrieve an existing paper by ID
-- GET  /papers/{id} — 404 response for a non-existent paper ID
+  Papers API:
+  - POST /papers/             — create a paper and verify returned fields
+  - GET  /papers/{id}         — retrieve an existing paper by ID
+  - GET  /papers/{id}         — 404 for a non-existent paper ID
+  - GET  /papers/{id}?include_chunks=true — retrieve a paper with its chunks
+
+  Chunking:
+  - POST /papers/{id}/chunks  — trigger chunking of a paper's abstract
+  - GET  /papers/{id}/chunks  — list chunks with expected fields (id, text, index, paper_id)
+  - chunk_text()              — unit tests for word-based chunking with overlap
+
+  Embeddings:
+  - embed_text()              — returns a 384-float vector
+  - cosine_similarity()       — 1.0 for identical vectors, 0.0 for orthogonal
+
+  Ingest & Search (integration):
+  - POST /ingest              — fetch from arXiv, store papers/chunks/embeddings
+  - POST /ingest (duplicate)  — skips already-ingested papers, reports skipped count
+  - POST /search              — embeds query, returns ranked results with scores in [0, 1]
 """
 
 import pytest
+import numpy as np
 from httpx import AsyncClient, ASGITransport
 from tortoise import Tortoise
 from app.main import app
 from app.chunker import chunk_text
+from app.arxiv import fetch_arxiv_papers
+from app.embedder import embed_text, cosine_similarity
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -172,3 +194,135 @@ async def test_get_paper_with_chunks(client, paper_with_chunks):
         assert "id" in chunk
         assert "text" in chunk
         assert "index" in chunk
+
+
+@pytest.mark.integration
+async def test_fetch_arxiv(query: str = "neural networks", max_results: int = 2):
+    """
+    Call `fetch_arxiv_papers("neural networks", max_results=2)`, assert you get 2 results each with required fields.
+
+    Note: requires network access to arXiv API, so this is marked as an integration test. You can run it with `pytest -m integration`.
+    """
+
+    papers = await fetch_arxiv_papers(query, max_results=max_results)
+    assert len(papers) == max_results
+    for paper in papers:
+        assert "arxiv_id" in paper
+        assert "title" in paper
+        assert "abstract" in paper
+        assert "authors" in paper
+        assert "year" in paper
+
+
+@pytest.mark.asyncio
+async def test_embed_text(text: str = "test string"):
+    """
+    Call `embed_text("test string")`, assert it returns a list of 384 floast
+    """
+
+    vector = embed_text(text)
+    assert isinstance(vector, list)
+    assert len(vector) == 384
+    assert all(isinstance(x, float) for x in vector)
+
+
+@pytest.mark.asyncio
+async def test_cosine_similarity():
+    """
+    Test `cosine_similarity` with two identical vectors (should be 1.0) and two orthogonal vectors (should be 0.0)
+    """
+
+    vec1 = [1.0] + [0.0] * 383
+    vec2 = [1.0] + [0.0] * 383
+    vec3 = [0.0] * 384
+
+    sim_identical = cosine_similarity(vec1, vec2)
+    sim_orthogonal = cosine_similarity(vec1, vec3)
+
+    assert sim_identical == pytest.approx(1.0)
+    assert sim_orthogonal == pytest.approx(0.0)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_ingest_endpoint(query: str = "quantum computing", max_results: int = 2):
+    """
+    POST to `/ingest` with a query, assert papers and chunks were created in the database
+    """
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        ingest_response = await client.post(
+            "/ingest", params={"query": query, "max_results": max_results}
+        )
+        assert ingest_response.status_code == 200
+        ingest_data = ingest_response.json()
+        assert "ingested_papers" in ingest_data
+        assert "ingested_chunks" in ingest_data
+        assert ingest_data["ingested_papers"] > 0
+        assert ingest_data["ingested_chunks"] > 0
+
+
+@pytest.mark.integration
+async def test_search_endpoint(query: str = "machine learning", max_results: int = 2):
+    """
+    Ingest some papers, then POST to `/search` with a relevant query, assert you get back results with scores between 0 and 1.
+
+    Note: this test relies on the ingest endpoint which calls the live arXiv API, so it's marked as an integration test. You can run it with `pytest -m integration`.
+    """
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        # Ingest papers so there is embedded data to search against
+        ingest_response = await client.post(
+            "/ingest", params={"query": query, "max_results": max_results}
+        )
+        assert ingest_response.status_code == 200
+
+        # Search with the same query — expect ranked results
+        search_response = await client.post(
+            "/search", params={"query": query, "top_k": max_results}
+        )
+        assert search_response.status_code == 200
+        data = search_response.json()
+
+        assert "query" in data
+        assert data["query"] == query
+        assert "results" in data
+        assert len(data["results"]) > 0
+
+        for result in data["results"]:
+            assert "paper_id" in result
+            assert "chunk_id" in result
+            assert "chunk_text" in result
+            assert "score" in result
+            assert 0.0 <= result["score"] <= 1.0
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_no_duplicate_ingest(query: str = "deep learning", max_results: int = 2):
+    """
+    Ingest the same query twice, assert that the second time it skips existing papers and does not create duplicates in the database.
+    """
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        # First ingest
+        ingest_response_1 = await client.post(
+            "/ingest", params={"query": query, "max_results": max_results}
+        )
+        assert ingest_response_1.status_code == 200
+        data_1 = ingest_response_1.json()
+        assert "ingested_papers" in data_1
+        assert data_1["ingested_papers"] > 0
+
+        # Second ingest with the same query
+        ingest_response_2 = await client.post(
+            "/ingest", params={"query": query, "max_results": max_results}
+        )
+        assert ingest_response_2.status_code == 200
+        data_2 = ingest_response_2.json()
+        assert "skipped_papers" in data_2
+        assert data_2["skipped_papers"] > 0
