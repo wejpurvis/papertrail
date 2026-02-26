@@ -19,6 +19,8 @@ Server stops
 """
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile, File
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from tortoise.contrib.fastapi import register_tortoise
 from app.database import TORTOISE_ORM
 from app.models import Chunk, Paper, Embedding
@@ -38,8 +40,15 @@ from app.pdf import extract_text_from_pdf
 
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 register_tortoise(app, config=TORTOISE_ORM, generate_schemas=True)
+
+
+# UI
+@app.get("/")
+async def serve_ui():
+    return FileResponse("static/index.html")
 
 
 # POST /papers: accepts a `PaperCreate` body, creates a `Paper` record, returns a `PaperResponse`
@@ -237,12 +246,12 @@ async def ask_question(question: AskRequest):
     6. Call `get_llm_provider().complete(system, user)` to get the answer from the LLM
     7. Return `AskResponse` with the answer and the source chunks
     """
-    question = question.question
     top_k = question.top_k
+    question = question.question
     # 1. Embed question
     query_vector = embed_text(question)
     # 2. Retrieve top_k relevant chunks using cosine similarity
-    chunks = await Chunk.all().prefetch_related("embedding")
+    chunks = await Chunk.all().prefetch_related("embedding", "paper")
     results = []
     for chunk in chunks:
         if not chunk.embedding:
@@ -252,7 +261,8 @@ async def ask_question(question: AskRequest):
             {
                 "paper_id": chunk.paper_id,
                 "chunk_id": chunk.id,
-                "text": chunk.text,
+                "paper_title": chunk.paper.title,
+                "test": chunk.text,
                 "score": score,
             }
         )
@@ -260,7 +270,7 @@ async def ask_question(question: AskRequest):
     top_results = results[:top_k]
     # 3. Build context string
     context = "\n\n".join(
-        [f"[{i+1}] {result['text']}" for i, result in enumerate(top_results)]
+        [f"[{i+1}] {result['test']}" for i, result in enumerate(top_results)]
     )
     # 4. Build system prompt
     system_prompt = """
@@ -269,7 +279,7 @@ async def ask_question(question: AskRequest):
     # 5. Build user prompt
     user_prompt = f"""Context: {context} \nQuestion: {question}"""
     # 6. Call LLM provider
-    llm = get_llm_provider().complete(system_prompt, user_prompt)
+    llm = await get_llm_provider().complete(system_prompt, user_prompt)
     # 7. Return response
     return AskResponse(answer=llm, source_chunks=top_results)
 
@@ -288,8 +298,8 @@ async def upload_pdf(file: UploadFile = File(...)):
         title=title, abstract=abstract, authors=[], year=0, full_text=text
     )
     chunks = chunk_text(text)
-    for i, chunk_text in enumerate(chunks):
-        chunk_obj = await Chunk.create(paper=paper_obj, text=chunk_text, index=i)
-        vector = embed_text(chunk_text)
+    for i, chunk in enumerate(chunks):
+        chunk_obj = await Chunk.create(paper=paper_obj, text=chunk, index=i)
+        vector = embed_text(chunk)
         await Embedding.create(chunk=chunk_obj, vector=vector)
     return {"paper_id": paper_obj.id, "chunk_count": len(chunks)}
