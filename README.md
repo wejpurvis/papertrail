@@ -24,7 +24,8 @@ uvicorn app.main:app --reload
 ## Test
 
 ```bash
-pytest tests/
+pytest tests/ -v -m "not integration"  # skip arXiv network tests
+pytest tests/ -v                        # run everything including network tests
 ```
 
 ## Status
