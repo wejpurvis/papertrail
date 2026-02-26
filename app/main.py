@@ -131,17 +131,13 @@ async def ingest_arxiv(query: str = "CO2 Electroreduction", max_results: int = 5
         # Chunk the abstract and create `Chunk` records
         chunks = chunk_text(paper["abstract"])
         for i, text in enumerate(chunks):
-            await Chunk.create(paper=paper_obj, text=text, index=i)
+            chunk_obj = await Chunk.create(paper=paper_obj, text=text, index=i)
             ingested_chunks += 1
             # Embed each chunk and create `Embedding` records (since ingest is write op)
             vector = embed_text(text)
-            await Embedding.create(paper=paper_obj, chunk_index=i, vector=vector)
+            await Embedding.create(chunk=chunk_obj, vector=vector)
 
-    # return {"ingested_papers": ingested_papers, "ingested_chunks": ingested_chunks, "skipped_papers": skipped_papers}
-
-    return {
-        f"ingested_papers: {ingested_papers}, \n ingested_chunks: {ingested_chunks}, \n skipped_papers: {skipped_papers}"
-    }
+    return {"ingested_papers": ingested_papers, "ingested_chunks": ingested_chunks, "skipped_papers": skipped_papers}
 
 
 # POST /papers/{paper_id}/embed: Triggers embedding of all chunks for a paper
