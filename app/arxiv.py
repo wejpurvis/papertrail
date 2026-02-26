@@ -13,7 +13,7 @@ async def fetch_arxiv_papers(query: str, max_results: int = 5) -> list[dict]:
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 "https://export.arxiv.org/api/query",
-                params={"search_query": f'all:"{query}"', "max_results": max_results},
+                params={"search_query": f"all:{query}", "max_results": max_results},
                 headers=headers,
             )
             response.raise_for_status()
