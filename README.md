@@ -35,7 +35,11 @@ Estbalished working API that can store and retrieve scientific papers in a SQLit
 
 ### Day 2
 
-WIP
+Added a `Chunk` model related to `Paper` via a foreign key, and a text chunking utility that splits abstracts into overlapping word windows. New endpoints trigger chunking and retrieve chunks per paper, with an optional `include_chunks` query parameter on the existing paper endpoint. BackgroundTasks used for async chunking.
+
+### Day 3
+
+Connected to the arXiv API to ingest real papers automatically. Added a sentence-transformers embedding model (`all-MiniLM-L6-v2`) and an `Embedding` model (one-to-one with `Chunk`) to store 384-dimensional vectors. Implemented semantic search via cosine similarity, returning the most relevant chunks for a natural language query. Duplicate ingestion is handled by deduplicating on `arxiv_id`.
 
 ## License
 
