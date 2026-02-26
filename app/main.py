@@ -38,6 +38,9 @@ from app.embedder import embed_text, cosine_similarity
 from app.llm import get_llm_provider
 from app.pdf import extract_text_from_pdf
 
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
