@@ -9,10 +9,13 @@ import xml.etree.ElementTree as ET
 async def fetch_arxiv_papers(query: str, max_results: int = 5) -> list[dict]:
     try:
         # Try to fetch from arXiv API
-        url = f"https://export.arxiv.org/api/query?search_query=ti:{query}&max_results={max_results}"
         headers = {"User-Agent": "papertrail/0.1 (learning project)"}
         async with httpx.AsyncClient() as client:
-            response = await client.get(url, headers=headers)
+            response = await client.get(
+                "https://export.arxiv.org/api/query",
+                params={"search_query": f'all:"{query}"', "max_results": max_results},
+                headers=headers,
+            )
             response.raise_for_status()
         return parse_arxiv_xml(response.text)
     except httpx.HTTPStatusError as e:
