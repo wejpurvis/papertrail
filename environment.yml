@@ -15,3 +15,7 @@ dependencies:
     - httpx
     - numpy
     - sentence-transformers
+    - anthropic
+    - ollama
+    - pypdf
+    - python-multipart
