@@ -13,5 +13,5 @@ dependencies:
     - pytest
     - pytest-asyncio
     - httpx
-    - python-dotenv
+    - numpy
     - sentence-transformers
