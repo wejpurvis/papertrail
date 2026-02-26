@@ -12,6 +12,7 @@ from datetime import datetime
 
 # Validates incoming POST request body
 class PaperCreate(BaseModel):
+    arxiv_id: Optional[str] = None
     title: str
     abstract: Optional[str] = "This is a placeholder abstract."  # Optional with default
     authors: list[str]
@@ -21,6 +22,7 @@ class PaperCreate(BaseModel):
 # Shapes API response
 class PaperResponse(BaseModel):
     id: int
+    arxiv_id: Optional[str] = None
     title: str
     abstract: str
     authors: list[str]
@@ -43,6 +45,7 @@ class ChunkResponse(BaseModel):
 # For GET /papers/{id} with chunks
 class PaperWithChunks(BaseModel):
     id: int
+    arxiv_id: Optional[str] = None
     title: str
     abstract: str
     authors: list[str]
