@@ -129,6 +129,7 @@ async def ingest_arxiv(query: str = "CO2 Electroreduction", max_results: int = 5
     ingested_papers = 0
     ingested_chunks = 0
     skipped_papers = 0
+    ingested_paper_ids = []
 
     # Fetch papers from arXiv API, then for each paper:
     for paper in papers:
@@ -148,6 +149,7 @@ async def ingest_arxiv(query: str = "CO2 Electroreduction", max_results: int = 5
             year=paper["year"],
         )
         ingested_papers += 1
+        ingested_paper_ids.append(paper_obj.id)
 
         # Chunk the abstract and create `Chunk` records
         chunks = chunk_text(paper.get("full_text") or paper["abstract"])
@@ -162,6 +164,7 @@ async def ingest_arxiv(query: str = "CO2 Electroreduction", max_results: int = 5
         "ingested_papers": ingested_papers,
         "ingested_chunks": ingested_chunks,
         "skipped_papers": skipped_papers,
+        "paper_ids": ingested_paper_ids,
     }
 
 
@@ -250,11 +253,18 @@ async def ask_question(question: AskRequest):
     7. Return `AskResponse` with the answer and the source chunks
     """
     top_k = question.top_k
+    paper_ids = question.paper_ids
     question = question.question
     # 1. Embed question
     query_vector = embed_text(question)
-    # 2. Retrieve top_k relevant chunks using cosine similarity
-    chunks = await Chunk.all().prefetch_related("embedding", "paper")
+    # 2. Retrieve chunks — filtered to session papers if provided
+    if paper_ids:
+        chunks = await Chunk.filter(paper_id__in=paper_ids).prefetch_related("embedding", "paper")
+        scope_papers = await Paper.filter(id__in=paper_ids).values("id", "title", "authors")
+    else:
+        chunks = await Chunk.all().prefetch_related("embedding", "paper")
+        scope_papers = await Paper.all().values("id", "title", "authors")
+
     results = []
     for chunk in chunks:
         if not chunk.embedding:
@@ -265,26 +275,75 @@ async def ask_question(question: AskRequest):
                 "paper_id": chunk.paper_id,
                 "chunk_id": chunk.id,
                 "paper_title": chunk.paper.title,
-                "test": chunk.text,
+                "authors": chunk.paper.authors,
+                "abstract": chunk.paper.abstract,
+                "text": chunk.text,
                 "score": score,
             }
         )
     results.sort(key=lambda x: x["score"], reverse=True)
-    top_results = results[:top_k]
-    # 3. Build context string
-    context = "\n\n".join(
-        [f"[{i+1}] {result['test']}" for i, result in enumerate(top_results)]
+
+    # Diversity: take at most 2 chunks per paper before cutting to top_k
+    # (prevents a large paper from monopolising results)
+    paper_chunk_counts: dict = {}
+    diverse_results = []
+    for r in results:
+        cnt = paper_chunk_counts.get(r["paper_id"], 0)
+        if cnt < 2:
+            diverse_results.append(r)
+            paper_chunk_counts[r["paper_id"]] = cnt + 1
+        if len(diverse_results) >= top_k:
+            break
+    top_results = diverse_results
+
+    # 3. Build context: start with a listing of ALL papers in scope so the LLM
+    #    can answer title/author questions even when chunks don't surface them
+    def fmt_authors(authors: list) -> str:
+        if not authors:
+            return "unknown"
+        if len(authors) <= 2:
+            return ", ".join(authors)
+        return f"{authors[0]} et al."
+
+    scope_listing = "Papers available:\n" + "\n".join(
+        f"  Paper #{p['id']}: \"{p['title']}\" — {fmt_authors(p['authors'])}"
+        for p in scope_papers
+    ) + "\n\n"
+
+    # For PDF-uploaded papers (no structured authors), append first-page text
+    pdf_extra = []
+    seen_pdf_ids: set = set()
+    for r in top_results:
+        if not r["authors"] and r["paper_id"] not in seen_pdf_ids and r["abstract"]:
+            seen_pdf_ids.add(r["paper_id"])
+            pdf_extra.append(f"Paper #{r['paper_id']} first page:\n{r['abstract']}")
+    pdf_block = "\n\n".join(pdf_extra) + "\n\n" if pdf_extra else ""
+
+    chunk_context = "\n\n".join(
+        f"[{i+1}] {result['paper_title']}\n{result['text']}"
+        for i, result in enumerate(top_results)
     )
+    context = scope_listing + pdf_block + chunk_context
+
     # 4. Build system prompt
-    system_prompt = """
-        You are a scientific research assistant. Answer the user's question based only on the provided context. If the answer is not in the context, say so. Always cite which source [1], [2] etc. you are drawing from.
-        """
+    system_prompt = (
+        "You are a scientific research assistant. Answer the user's question based only "
+        "on the provided context. If the answer is not in the context, say so. "
+        "Always cite which source [1], [2] etc. you are drawing from."
+    )
     # 5. Build user prompt
-    user_prompt = f"""Context: {context} \nQuestion: {question}"""
+    user_prompt = f"Context:\n{context}\n\nQuestion: {question}"
     # 6. Call LLM provider
     llm = await get_llm_provider().complete(system_prompt, user_prompt)
-    # 7. Return response
-    return AskResponse(answer=llm, source_chunks=top_results)
+    # 7. Deduplicate source_chunks by paper_id (keep best-scoring chunk per paper)
+    seen: set = set()
+    unique_sources = []
+    for r in top_results:
+        if r["paper_id"] not in seen:
+            seen.add(r["paper_id"])
+            unique_sources.append(r)
+
+    return AskResponse(answer=llm, source_chunks=unique_sources)
 
 
 # POST /upload-pdf
@@ -297,10 +356,16 @@ async def upload_pdf(file: UploadFile = File(...)):
     text = extract_text_from_pdf(contents)
     title = file.filename
     abstract = text[:1000]  # first 1000 chars as abstract
+
+    # Prepend a metadata header so LLM always sees filename + first-page text
+    # in the first chunk (before the reference section dominates similarity scores)
+    metadata_prefix = f"Document title (filename): {file.filename}\n\n"
+    searchable_text = metadata_prefix + text
+
     paper_obj = await Paper.create(
-        title=title, abstract=abstract, authors=[], year=0, full_text=text
+        title=title, abstract=abstract, authors=[], year=0, full_text=searchable_text
     )
-    chunks = chunk_text(text)
+    chunks = chunk_text(searchable_text)
     for i, chunk in enumerate(chunks):
         chunk_obj = await Chunk.create(paper=paper_obj, text=chunk, index=i)
         vector = embed_text(chunk)
