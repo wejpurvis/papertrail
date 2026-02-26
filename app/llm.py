@@ -51,6 +51,7 @@ class OllamaProvider(LLMProvider):
 # ----- Factory -----
 def get_llm_provider() -> LLMProvider:
     provider = os.getenv("LLM_PROVIDER", "ollama")  # default to free
+    print(f"Using LLM provider: {provider}")
     if provider == "claude":
         return ClaudeProvider()
     elif provider == "ollama":
