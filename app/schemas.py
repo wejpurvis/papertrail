@@ -54,3 +54,24 @@ class PaperWithChunks(BaseModel):
     chunks: list[ChunkResponse]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# For search request body
+class ArxivSearchRequest(BaseModel):
+    query: str
+    max_results: int = 5
+
+
+# For search results returned by the API (after embedding similarity search)
+class SearchResult(BaseModel):
+    query: str
+    top_k: int = 5
+
+
+# For individual search result items
+class SearchResult(BaseModel):
+    chunk_id: int
+    paper_id: int
+    paper_title: str
+    test: str
+    score: float
