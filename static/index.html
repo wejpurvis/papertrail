@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Papertrail</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -157,7 +158,34 @@
       max-width: 72%;
     }
 
-    .answer { white-space: pre-wrap; }
+    /* Markdown prose inside assistant messages */
+    .answer { line-height: 1.6; }
+    .answer p { margin: 0.5em 0; }
+    .answer p:first-child { margin-top: 0; }
+    .answer p:last-child { margin-bottom: 0; }
+    .answer h1, .answer h2, .answer h3 {
+      font-weight: 600; margin: 0.9em 0 0.3em;
+    }
+    .answer h1 { font-size: 1.05em; }
+    .answer h2 { font-size: 0.97em; }
+    .answer h3 { font-size: 0.9em; }
+    .answer ul, .answer ol { padding-left: 1.4em; margin: 0.4em 0; }
+    .answer li { margin: 0.15em 0; }
+    .answer code {
+      background: #f0f0f2; border-radius: 3px;
+      padding: 0.1em 0.35em; font-size: 0.85em; font-family: monospace;
+    }
+    .answer pre {
+      background: #f0f0f2; border-radius: 6px;
+      padding: 10px 12px; overflow-x: auto; margin: 0.5em 0;
+    }
+    .answer pre code { background: none; padding: 0; }
+    .answer blockquote {
+      border-left: 3px solid #d4d4d8; margin: 0.5em 0;
+      padding: 0.2em 0.8em; color: #52525b;
+    }
+    .answer strong { font-weight: 600; }
+    .answer hr { border: none; border-top: 1px solid #e4e4e7; margin: 0.6em 0; }
 
     .sources {
       margin-top: 10px;
@@ -235,6 +263,10 @@
   </div>
 
   <script>
+    // Track paper IDs added in this browser session
+    // (resets on page refresh — keeps scope to what the user has added)
+    let sessionPaperIds = [];
+
     // --- Helpers ---
 
     function addMsg(role, html) {
@@ -277,9 +309,11 @@
         const res  = await fetch(`/ingest?query=${encodeURIComponent(query)}&max_results=${max}`, { method: 'POST' });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail ?? 'Ingest failed');
+        if (data.paper_ids?.length) sessionPaperIds.push(...data.paper_ids);
         addMsg('system',
           `Done — ${data.ingested_papers} papers ingested, ${data.ingested_chunks} chunks created` +
-          (data.skipped_papers ? `, ${data.skipped_papers} skipped (already stored).` : '.')
+          (data.skipped_papers ? `, ${data.skipped_papers} skipped (already stored).` : '.') +
+          (sessionPaperIds.length ? ` Session: ${sessionPaperIds.length} paper(s).` : '')
         );
       } catch (e) {
         addMsg('error', `Ingest error: ${escHtml(e.message)}`);
@@ -305,8 +339,9 @@
         const res  = await fetch('/upload-pdf', { method: 'POST', body: form });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail ?? 'Upload failed');
+        sessionPaperIds.push(data.paper_id);
         addMsg('system',
-          `Uploaded <strong>${escHtml(file.name)}</strong> → paper #${data.paper_id}, ${data.chunk_count} chunks.`
+          `Uploaded <strong>${escHtml(file.name)}</strong> → paper #${data.paper_id}, ${data.chunk_count} chunks. Session: ${sessionPaperIds.length} paper(s).`
         );
       } catch (e) {
         addMsg('error', `Upload error: ${escHtml(e.message)}`);
@@ -330,21 +365,24 @@
       const bubble = addMsg('assistant', '<em style="color:#a1a1aa">Thinking…</em>');
 
       try {
+        const body = { question, top_k: 5 };
+        if (sessionPaperIds.length) body.paper_ids = sessionPaperIds;
         const res  = await fetch('/ask', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ question, top_k: 5 }),
+          body:    JSON.stringify(body),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail ?? 'Request failed');
 
-        let html = `<div class="answer">${escHtml(data.answer)}</div>`;
+        let html = `<div class="answer">${marked.parse(data.answer)}</div>`;
 
         if (data.source_chunks?.length) {
           html += `<div class="sources"><div class="sources-label">Sources</div>`;
           data.source_chunks.forEach((chunk, i) => {
             const score = typeof chunk.score === 'number' ? chunk.score.toFixed(3) : '—';
-            html += `<div class="source-item">[${i + 1}] Paper #${chunk.paper_id} &mdash; similarity ${score}</div>`;
+            const title = chunk.paper_title || `Paper #${chunk.paper_id}`;
+            html += `<div class="source-item">[${i + 1}] ${escHtml(title)} &mdash; similarity ${score}</div>`;
           });
           html += `</div>`;
         }
