@@ -8,6 +8,7 @@ from tortoise import fields
 
 class Paper(Model):
     id = fields.IntField(primary_key=True)
+    arxiv_id = fields.CharField(max_length=50, null=True, unique=True)
     title = fields.CharField(max_length=500)
     abstract = fields.TextField()
     authors = fields.JSONField()  # list of strings
@@ -30,3 +31,14 @@ class Chunk(Model):
 
     class Meta:
         table = "chunks"
+
+
+class Embedding(Model):
+    id = fields.IntField(primary_key=True)
+    # OneToOneField means each chunk has exactly one embedding. This is a stricter relationship than ForeignKey - Tortoise will enforce uniqueness
+    chunk = fields.OneToOneField("models.Chunk", related_name="embedding")
+    vector = fields.JSONField()  # stores embedding as a list of floats
+    created_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "embeddings"
