@@ -22,7 +22,7 @@ async def fetch_arxiv_papers(query: str, max_results: int = 5) -> list[dict]:
         raise
 
 
-async def parse_arxiv_xml(xml_string: str) -> list[dict]:
+def parse_arxiv_xml(xml_string: str) -> list[dict]:
     # Parse arxiv XML into tree and extract paper info
     root = ET.fromstring(xml_string)
     papers = []
