@@ -17,6 +17,10 @@ def embed_text(text: str) -> list[float]:
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:
     # Compute cosine similarity between two embeddings
-    a = np.array(a)
-    b = np.array(b)
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+    a, b = np.array(a), np.array(b)
+    norm_a, norm_b = np.linalg.norm(a), np.linalg.norm(b)
+
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0  # or raise ValueError, depending on your use case
+
+    return np.dot(a, b) / (norm_a * norm_b)
