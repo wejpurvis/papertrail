@@ -301,9 +301,7 @@ async def ask_question(question: AskRequest):
     def fmt_authors(authors: list) -> str:
         if not authors:
             return "unknown"
-        if len(authors) <= 2:
-            return ", ".join(authors)
-        return f"{authors[0]} et al."
+        return ", ".join(authors)
 
     scope_listing = "Papers available:\n" + "\n".join(
         f"  Paper #{p['id']}: \"{p['title']}\" — {fmt_authors(p['authors'])}"
