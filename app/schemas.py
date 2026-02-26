@@ -75,3 +75,15 @@ class SearchResult(BaseModel):
     paper_title: str
     test: str
     score: float
+
+
+# For LLM question-answering request body
+class AskRequest(BaseModel):
+    question: str
+    top_k: int = 5
+
+
+# For LLM question-answering response
+class AskResponse(BaseModel):
+    answer: str
+    source_chunks: list[SearchResult]
